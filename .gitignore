@@ -52,10 +52,17 @@ pinecone.env
 *.pth
 *.model
 
-# Downloaded files
+# Downloaded documents
 downloads/
 temp/
 uploads/
+
+# Document files (if needed to exclude from repo)
+*.pdf
+*.docx
+*.doc
+*.eml
+*.msg
 
 # Other sensitive files
 *.key
