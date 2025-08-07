@@ -1,0 +1,62 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environment
+venv/
+env/
+*.env
+*.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Pytest
+.cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Pyre
+.pyre/
+
+# Cython debug symbols
+cython_debug/
+
+# VSCode
+.vscode/
+
+# Logs
+*.log
+
+# Pinecone API keys or sensitive files
+pinecone.env
+
+# Mini LLM and vector database specific
+*.db
+*.pkl
+*.h5
+*.pt
+*.pth
+*.model
+
+# Other sensitive files
+*.key
+*.pem
+*.crt
+
+# System files
+.DS_Store
+Thumbs.db
