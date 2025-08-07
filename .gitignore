@@ -52,6 +52,11 @@ pinecone.env
 *.pth
 *.model
 
+# Downloaded files
+downloads/
+temp/
+uploads/
+
 # Other sensitive files
 *.key
 *.pem
@@ -60,3 +65,9 @@ pinecone.env
 # System files
 .DS_Store
 Thumbs.db
+
+# Flask instance folder
+instance/
+
+# Flask uploads
+uploads/
