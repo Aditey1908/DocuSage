@@ -78,3 +78,13 @@ instance/
 
 # Flask uploads
 uploads/
+
+# PDF processing directories
+data/raw/*.pdf
+data/processed/
+*.pdf
+
+# Environment files
+.env
+.env.local
+.env.production
