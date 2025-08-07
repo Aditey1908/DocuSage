@@ -1,7 +1,14 @@
-import os, json, re
+import json
+import logging
+import os
+import re
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
+
 import fitz  # PyMuPDF
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 RAW_DIR = Path("data/raw")
 OUT_ROOT = Path("data/processed")
@@ -15,6 +22,78 @@ def clean(t: str) -> str:
     t = re.sub(r"\n{3,}", "\n\n", t)  # multiple newlines
     t = re.sub(r"[ \t]{2,}", " ", t)  # multiple spaces/tabs
     return t.strip()
+
+def extract_text_from_pdf(pdf_filepath):
+    """
+    Simple function to extract text from PDF for Flask app usage
+    Returns extracted text as string
+    """
+    try:
+        if not os.path.exists(pdf_filepath):
+            logger.error(f"PDF file not found: {pdf_filepath}")
+            return "Error: PDF file not found."
+        
+        doc = fitz.open(pdf_filepath)
+        text_parts = []
+        
+        for page_num in range(len(doc)):
+            try:
+                page = doc[page_num]
+                page_text = page.get_text()
+                if page_text.strip():
+                    text_parts.append(f"\n--- Page {page_num + 1} ---\n")
+                    text_parts.append(clean(page_text))
+            except Exception as e:
+                logger.warning(f"Failed to extract text from page {page_num + 1}: {e}")
+                continue
+        
+        doc.close()
+        
+        if text_parts:
+            extracted_text = "\n".join(text_parts)
+            logger.info(f"Successfully extracted text using PyMuPDF: {len(extracted_text)} characters")
+            return extracted_text.strip()
+        else:
+            return "Error: No text could be extracted from the PDF."
+            
+    except Exception as e:
+        logger.error(f"Error extracting text from PDF: {e}")
+        return f"Error: Failed to extract text from PDF - {str(e)}"
+
+def save_extracted_text(text_content, text_filepath):
+    """Save extracted text to a file"""
+    try:
+        with open(text_filepath, 'w', encoding='utf-8') as text_file:
+            text_file.write(text_content)
+        logger.info(f"Text saved to: {text_filepath}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save text to {text_filepath}: {e}")
+        return False
+
+def process_pdf_simple(pdf_filepath, output_dir="downloads"):
+    """
+    Simple function to process a PDF file: extract text and save to .txt file
+    Returns tuple: (extracted_text, text_filepath, success)
+    """
+    try:
+        # Extract text from PDF
+        logger.info(f"Extracting text from PDF: {pdf_filepath}")
+        extracted_text = extract_text_from_pdf(pdf_filepath)
+        
+        # Generate text file path
+        pdf_basename = os.path.basename(pdf_filepath)
+        text_filename = os.path.splitext(pdf_basename)[0] + '.txt'
+        text_filepath = os.path.join(output_dir, text_filename)
+        
+        # Save extracted text
+        success = save_extracted_text(extracted_text, text_filepath)
+        
+        return extracted_text, text_filepath, success
+        
+    except Exception as e:
+        logger.error(f"Error processing PDF {pdf_filepath}: {e}")
+        return f"Error processing PDF: {str(e)}", "", False
 
 def ensure_dirs(stem: str):
     """Create output directories for a document."""

@@ -6,6 +6,8 @@ import tempfile
 from urllib.parse import urlparse
 
 import requests
+# Import our PDF extraction module
+from extract_pdf import process_pdf_simple
 from flask import Flask, jsonify, request
 
 # Configure logging
@@ -359,17 +361,35 @@ def hackrx_run():
             # Get file size for verification
             file_size = os.path.getsize(pdf_filepath)
             
-            # All documents are now converted to PDF
+            # Extract text from the PDF using extract_pdf.py
+            logger.info(f"Processing PDF for text extraction: {pdf_filepath}")
+            extracted_text, text_filepath, extraction_success = process_pdf_simple(pdf_filepath, UPLOAD_FOLDER)
+            
+            # Prepare response data
             response_data = {
                 'status': 'success',
-                'message': 'Document downloaded and converted to PDF successfully',
+                'message': 'Document downloaded, converted to PDF, and text extracted successfully',
                 'document_path': pdf_filepath,
                 'document_type': 'PDF',
                 'file_size_bytes': file_size,
                 'questions_count': len(questions),
                 'document_url': documents_url,
-                'conversion_note': 'All documents are automatically converted to PDF format'
+                'conversion_note': 'All documents are automatically converted to PDF format and text is extracted'
             }
+            
+            # Add text extraction results
+            if extraction_success:
+                response_data.update({
+                    'text_path': text_filepath,
+                    'text_length_chars': len(extracted_text),
+                    'extracted_text': extracted_text,
+                    'text_extraction': 'success'
+                })
+            else:
+                response_data.update({
+                    'text_extraction': 'failed',
+                    'text_extraction_error': extracted_text  # Will contain error message
+                })
             
             # Include questions in response for reference
             if questions:
@@ -395,10 +415,11 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'message': 'Document extraction and PDF conversion service is running',
+        'message': 'Document extraction, PDF conversion, and text extraction service is running',
         'supported_input_formats': ['PDF', 'DOCX', 'DOC', 'EML', 'MSG'],
         'output_format': 'PDF (all documents converted to PDF)',
-        'features': ['Document download', 'Automatic PDF conversion', 'Office 365 viewer support']
+        'text_extraction': 'Yes (using PyMuPDF via extract_pdf.py)',
+        'features': ['Document download', 'Automatic PDF conversion', 'Text extraction', 'Office 365 viewer support']
     }), 200
 
 @app.errorhandler(404)

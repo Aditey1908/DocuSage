@@ -1,11 +1,12 @@
-# Bajaj_AR - Document to PDF Conversion API
+# Bajaj_AR - Document to PDF Conversion and Text Extraction API
 
-A Flask API service that downloads documents from URLs and automatically converts them to PDF format for the HackRX challenge.
+A Flask API service that downloads documents from URLs, automatically converts them to PDF format, and extracts text content using a dedicated PDF processing module for the HackRX challenge.
 
 ## Features
 
 - ✅ **Multi-format support**: PDF, DOCX, DOC, EML, MSG
 - ✅ **Automatic PDF conversion**: All documents converted to PDF
+- ✅ **Text extraction**: Extracts text content from PDFs using `extract_pdf.py`
 - ✅ **Office 365 viewer support**: Handles Office viewer URLs
 - ✅ **Azure blob storage**: Compatible with Azure storage URLs
 
@@ -50,12 +51,16 @@ A Flask API service that downloads documents from URLs and automatically convert
 ```json
 {
   "status": "success",
-  "message": "Document downloaded and converted to PDF successfully",
+  "message": "Document downloaded, converted to PDF, and text extracted successfully",
   "document_path": "downloads/document.pdf",
+  "text_path": "downloads/document.txt",
   "document_type": "PDF",
   "file_size_bytes": 123456,
+  "text_length_chars": 5432,
   "questions_count": 2,
-  "conversion_note": "All documents are automatically converted to PDF format"
+  "extracted_text": "Full text content of the document...",
+  "text_extraction": "success",
+  "conversion_note": "All documents are automatically converted to PDF format and text is extracted"
 }
 ```
 
