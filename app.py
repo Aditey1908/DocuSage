@@ -1,6 +1,18 @@
+
 import os
+import sys
 import logging
 import importlib.util
+
+# --- dynamically import pdf_parser from local file ---
+pdf_parser_spec = importlib.util.spec_from_file_location(
+    "pdf_parser",
+    os.path.join(os.path.dirname(__file__), "pdf_parser.py")
+)
+pdf_parser = importlib.util.module_from_spec(pdf_parser_spec)
+sys.modules["pdf_parser"] = pdf_parser
+pdf_parser_spec.loader.exec_module(pdf_parser)
+
 import sys
 semantic_chunker_spec = importlib.util.spec_from_file_location("semantic_chunker", os.path.join(os.path.dirname(__file__), "semantic_chunker.py"))
 semantic_chunker = importlib.util.module_from_spec(semantic_chunker_spec)
@@ -330,28 +342,17 @@ def download_document_from_url(url, filename=None):
         raise Exception(f"Unexpected error downloading document: {str(e)}")
 
 def parse_pdf_to_text(pdf_filepath):
-    """Parse PDF to text using pymupdf4llm and save as .txt file"""
+    """Parse PDF to text using our local pdf_parser.extract_document and save as .txt"""
     try:
-        logger.info(f"Parsing PDF to text: {pdf_filepath}")
-        
-        # Import here to avoid startup delay
-        import pymupdf4llm
-
-        # Convert PDF to markdown-formatted text
-        md_text = pymupdf4llm.to_markdown(str(pdf_filepath))
-        
-        # Create output text file path
-        pdf_path = Path(pdf_filepath)
-        txt_filepath = pdf_path.with_suffix('.txt')
-        
-        # Save as .txt file (Markdown is still plain text; keeps headings & tables readable)
-        txt_filepath.write_bytes(md_text.encode("utf-8"))
-        
+        logger.info(f"[parse_pdf_to_text] Using pdf_parser from: {getattr(pdf_parser, '__file__', 'unknown')}")
+        logger.info(f"[parse_pdf_to_text] Parser version: {getattr(pdf_parser, '__VERSION__', 'n/a')}")
+        text = pdf_parser.extract_document(str(pdf_filepath))
+        txt_filepath = Path(pdf_filepath).with_suffix('.txt')
+        txt_filepath.write_text(text, encoding="utf-8")
         logger.info(f"PDF parsed and text saved to: {txt_filepath}")
-        return str(txt_filepath), md_text
-        
+        return str(txt_filepath), text
     except Exception as e:
-        logger.error(f"Error parsing PDF to text: {e}")
+        logger.error(f"Error parsing PDF to text via pdf_parser: {e}")
         raise Exception(f"Failed to parse PDF: {str(e)}")
 
 @app.route('/hackrx/run', methods=['POST'])
@@ -407,18 +408,16 @@ def hackrx_run():
                     # --- Answer questions using Pinecone and Gemini ---
                     answers = []
                     if questions:
-                        # Use the same model and index as in semantic_chunker
-                        model = semantic_chunker.model
-                        index = semantic_chunker.index
+                        # Use FAISS-based search and Gemini for answers
                         generate_answer_with_gemini = semantic_chunker.generate_answer_with_gemini
+                        faiss_query = semantic_chunker.faiss_query
                         for q in questions:
-                            q_vec = model.encode(q).tolist()
-                            result = index.query(vector=q_vec, top_k=3, include_metadata=True)
-                            answer = generate_answer_with_gemini(q, result["matches"])
+                            top_chunks = faiss_query(q, top_k=3)
+                            answer = generate_answer_with_gemini(q, top_chunks)
                             answers.append({
                                 "question": q,
                                 "answer": answer,
-                                "top_chunks": [m["metadata"]["text"] for m in result["matches"]]
+                                "top_chunks": [m["metadata"]["text"] for m in top_chunks]
                             })
                     else:
                         answers = []

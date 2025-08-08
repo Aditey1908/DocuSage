@@ -4,7 +4,7 @@ import json
 import re
 from dotenv import load_dotenv
 import google.generativeai as genai
-from pinecone import Pinecone, ServerlessSpec
+import faiss
 from sentence_transformers import SentenceTransformer
 
 # ✅ Gemini Semantic Chunker (batched + JSON mode + safe parse + fallback)
@@ -102,21 +102,10 @@ Answer:
     response = model.generate_content(prompt)
     return response.text.strip()
 
-# ✅ Pinecone setup
-PINECONE_API_KEY = "pcsk_55CaUA_94aDz1tmSrDnYsvZjSsRWKxgTYUiwKXWd1Yc3KxGpjc9JHpEoZcrWNELNRB68dW"
-INDEX_NAME = "semantic-search"
 
-pc = Pinecone(api_key=PINECONE_API_KEY)
-
-if INDEX_NAME not in pc.list_indexes().names():
-    pc.create_index(
-        name=INDEX_NAME,
-        dimension=384,
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region="us-east-1")
-    )
-
-index = pc.Index(INDEX_NAME)
+# ✅ FAISS setup
+faiss_index = None
+faiss_texts = []
 
 # ✅ Load MiniLM model
 model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -124,11 +113,13 @@ dim = model.get_sentence_embedding_dimension()
 
 
 # --------- MAIN PROCESSING FUNCTION ----------
+
 def process_text_for_semantic_search(full_text: str, max_chunks: int = 200):
     """
-    Chunks, embeds, and upserts the provided text to Pinecone.
-    Returns the number of vectors upserted.
+    Chunks, embeds, and stores the provided text in FAISS.
+    Returns the number of vectors indexed.
     """
+    global faiss_index, faiss_texts
     print(f"Loaded text chars: {len(full_text)}")
     chunks = chunk_fast(full_text)
     print(f"Fast chunks: {len(chunks)}")
@@ -136,32 +127,24 @@ def process_text_for_semantic_search(full_text: str, max_chunks: int = 200):
         print(f"Capping to first {max_chunks} chunks for speed.")
         chunks = chunks[:max_chunks]
 
-    def _cap_bytes(s: str, max_bytes: int) -> str:
-        b = s.encode("utf-8")
-        if len(b) <= max_bytes:
-            return s
-        return b[:max_bytes].decode("utf-8", errors="ignore")
-
-    METADATA_BYTE_CAP = 20000
     texts = [(c["text"] or "").strip() for c in chunks if (c["text"] or "").strip()]
     embs = model.encode(texts, batch_size=64, show_progress_bar=False)
-    vectors = []
-    for e, c in zip(embs, chunks[:len(embs)]):
-        if len(e) != dim:
-            continue
-        capped_text = _cap_bytes(c["text"], METADATA_BYTE_CAP)
-        vectors.append({
-            "id": str(uuid.uuid4()),
-            "values": e.tolist(),
-            "metadata": {
-                "text": capped_text,
-                "title": c.get("title", "") or ""
-            }
-        })
-    if not vectors:
-        raise RuntimeError("No valid vectors to upsert after chunking and embedding.")
-    BATCH_SIZE = 200
-    for i in range(0, len(vectors), BATCH_SIZE):
-        index.upsert(vectors=vectors[i:i+BATCH_SIZE])
-    print(f"Upserted {len(vectors)} vectors to Pinecone.")
-    return len(vectors)
+    embs = embs.astype('float32')
+    faiss_index = faiss.IndexFlatL2(dim)
+    faiss_index.add(embs)
+    faiss_texts = texts
+    print(f"Indexed {len(texts)} vectors in FAISS.")
+    return len(texts)
+
+# Function to query FAISS index
+def faiss_query(query: str, top_k: int = 5):
+    global faiss_index, faiss_texts
+    if faiss_index is None or not faiss_texts:
+        raise RuntimeError("FAISS index is not built. Please process text first.")
+    query_emb = model.encode([query], show_progress_bar=False).astype('float32')
+    D, I = faiss_index.search(query_emb, top_k)
+    results = []
+    for idx in I[0]:
+        if idx < len(faiss_texts):
+            results.append({"metadata": {"text": faiss_texts[idx]}})
+    return results
