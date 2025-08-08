@@ -3,6 +3,7 @@ import os
 import platform
 import subprocess
 import tempfile
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
@@ -322,6 +323,31 @@ def download_document_from_url(url, filename=None):
         logger.error(f"Unexpected error: {e}")
         raise Exception(f"Unexpected error downloading document: {str(e)}")
 
+def parse_pdf_to_text(pdf_filepath):
+    """Parse PDF to text using pymupdf4llm and save as .txt file"""
+    try:
+        logger.info(f"Parsing PDF to text: {pdf_filepath}")
+        
+        # Import here to avoid startup delay
+        import pymupdf4llm
+
+        # Convert PDF to markdown-formatted text
+        md_text = pymupdf4llm.to_markdown(str(pdf_filepath))
+        
+        # Create output text file path
+        pdf_path = Path(pdf_filepath)
+        txt_filepath = pdf_path.with_suffix('.txt')
+        
+        # Save as .txt file (Markdown is still plain text; keeps headings & tables readable)
+        txt_filepath.write_bytes(md_text.encode("utf-8"))
+        
+        logger.info(f"PDF parsed and text saved to: {txt_filepath}")
+        return str(txt_filepath), md_text
+        
+    except Exception as e:
+        logger.error(f"Error parsing PDF to text: {e}")
+        raise Exception(f"Failed to parse PDF: {str(e)}")
+
 @app.route('/hackrx/run', methods=['POST'])
 def hackrx_run():
     """Handle the POST request to extract documents from URL"""
@@ -359,16 +385,38 @@ def hackrx_run():
             # Get file size for verification
             file_size = os.path.getsize(pdf_filepath)
             
+            # Parse the PDF to extract text
+            try:
+                txt_filepath, extracted_text = parse_pdf_to_text(pdf_filepath)
+                txt_file_size = os.path.getsize(txt_filepath)
+                parsing_success = True
+                parsing_error = None
+                logger.info(f"PDF successfully parsed to text file: {txt_filepath}")
+            except Exception as parse_error:
+                logger.warning(f"PDF parsing failed, but PDF conversion was successful: {parse_error}")
+                txt_filepath = None
+                txt_file_size = 0
+                extracted_text = None
+                parsing_success = False
+                parsing_error = str(parse_error)
+            
             # All documents are now converted to PDF
             response_data = {
                 'status': 'success',
-                'message': 'Document downloaded and converted to PDF successfully',
+                'message': 'Document downloaded, converted to PDF, and parsed successfully',
                 'document_path': pdf_filepath,
                 'document_type': 'PDF',
                 'file_size_bytes': file_size,
                 'questions_count': len(questions),
                 'document_url': documents_url,
-                'conversion_note': 'All documents are automatically converted to PDF format'
+                'conversion_note': 'All documents are automatically converted to PDF format',
+                'text_extraction': {
+                    'success': parsing_success,
+                    'text_file_path': txt_filepath,
+                    'text_file_size_bytes': txt_file_size,
+                    'extracted_text_preview': extracted_text[:500] + '...' if extracted_text and len(extracted_text) > 500 else extracted_text,
+                    'error': parsing_error
+                }
             }
             
             # Include questions in response for reference
@@ -390,15 +438,92 @@ def hackrx_run():
             'status': 'failed'
         }), 500
 
+@app.route('/parse-pdf', methods=['POST'])
+def parse_pdf_endpoint():
+    """Parse an existing PDF file to extract text"""
+    try:
+        # Check if request has JSON data
+        if not request.is_json:
+            return jsonify({
+                'error': 'Request must be JSON',
+                'status': 'failed'
+            }), 400
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if 'pdf_path' not in data:
+            return jsonify({
+                'error': 'Missing required field: pdf_path',
+                'status': 'failed'
+            }), 400
+        
+        pdf_path = data['pdf_path']
+        
+        # Check if file exists
+        if not os.path.exists(pdf_path):
+            return jsonify({
+                'error': f'PDF file not found: {pdf_path}',
+                'status': 'failed'
+            }), 404
+        
+        # Check if it's a PDF file
+        if not pdf_path.lower().endswith('.pdf'):
+            return jsonify({
+                'error': 'File must be a PDF',
+                'status': 'failed'
+            }), 400
+        
+        try:
+            # Parse the PDF to extract text
+            txt_filepath, extracted_text = parse_pdf_to_text(pdf_path)
+            txt_file_size = os.path.getsize(txt_filepath)
+            
+            response_data = {
+                'status': 'success',
+                'message': 'PDF parsed successfully',
+                'pdf_path': pdf_path,
+                'text_file_path': txt_filepath,
+                'text_file_size_bytes': txt_file_size,
+                'extracted_text_preview': extracted_text[:500] + '...' if len(extracted_text) > 500 else extracted_text,
+                'full_text_length': len(extracted_text)
+            }
+            
+            return jsonify(response_data), 200
+            
+        except Exception as e:
+            return jsonify({
+                'error': f'Failed to parse PDF: {str(e)}',
+                'status': 'failed'
+            }), 500
+    
+    except Exception as e:
+        logger.error(f"Error in parse_pdf endpoint: {e}")
+        return jsonify({
+            'error': f'Internal server error: {str(e)}',
+            'status': 'failed'
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'message': 'Document extraction and PDF conversion service is running',
+        'message': 'Document extraction, PDF conversion, and text parsing service is running',
         'supported_input_formats': ['PDF', 'DOCX', 'DOC', 'EML', 'MSG'],
         'output_format': 'PDF (all documents converted to PDF)',
-        'features': ['Document download', 'Automatic PDF conversion', 'Office 365 viewer support']
+        'features': [
+            'Document download', 
+            'Automatic PDF conversion', 
+            'Office 365 viewer support',
+            'PDF text extraction',
+            'Automatic text parsing after PDF conversion'
+        ],
+        'endpoints': {
+            '/hackrx/run': 'Download document, convert to PDF, and extract text',
+            '/parse-pdf': 'Parse existing PDF file to extract text',
+            '/health': 'Health check'
+        }
     }), 200
 
 @app.errorhandler(404)
