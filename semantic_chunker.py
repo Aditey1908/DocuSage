@@ -122,68 +122,46 @@ index = pc.Index(INDEX_NAME)
 model = SentenceTransformer("all-MiniLM-L6-v2")
 dim = model.get_sentence_embedding_dimension()
 
-# ✅ Load text from .txt file
-with open("[output.txt]", "r", encoding="utf-8") as f:
-    lines = [line.strip().strip('"') for line in f if line.strip()]
-    full_text = "\n".join(lines)
-print(f"Loaded text chars: {len(full_text)}")
 
-# ✅ Use LLM for semantic-aware chunking (with fallback)
-chunks = chunk_fast(full_text)
-print(f"Fast chunks: {len(chunks)}")
+# --------- MAIN PROCESSING FUNCTION ----------
+def process_text_for_semantic_search(full_text: str, max_chunks: int = 200):
+    """
+    Chunks, embeds, and upserts the provided text to Pinecone.
+    Returns the number of vectors upserted.
+    """
+    print(f"Loaded text chars: {len(full_text)}")
+    chunks = chunk_fast(full_text)
+    print(f"Fast chunks: {len(chunks)}")
+    if len(chunks) > max_chunks:
+        print(f"Capping to first {max_chunks} chunks for speed.")
+        chunks = chunks[:max_chunks]
 
-# Cap initial chunks for <30s indexing on huge docs
-MAX_CHUNKS_FOR_COLD_START = 200
-if len(chunks) > MAX_CHUNKS_FOR_COLD_START:
-    print(f"Capping to first {MAX_CHUNKS_FOR_COLD_START} chunks for speed.")
-    chunks = chunks[:MAX_CHUNKS_FOR_COLD_START]
+    def _cap_bytes(s: str, max_bytes: int) -> str:
+        b = s.encode("utf-8")
+        if len(b) <= max_bytes:
+            return s
+        return b[:max_bytes].decode("utf-8", errors="ignore")
 
-# --------- BATCHED EMBEDDINGS ----------
-def _cap_bytes(s: str, max_bytes: int) -> str:
-    b = s.encode("utf-8")
-    if len(b) <= max_bytes:
-        return s
-    return b[:max_bytes].decode("utf-8", errors="ignore")
-
-# Reasonable safety margin under 40KB Pinecone limit
-METADATA_BYTE_CAP = 20000
-
-texts = [(c["text"] or "").strip() for c in chunks if (c["text"] or "").strip()]
-embs = model.encode(texts, batch_size=64, show_progress_bar=False)
-
-vectors = []
-for e, c in zip(embs, chunks[:len(embs)]):
-    if len(e) != dim:
-        continue
-    capped_text = _cap_bytes(c["text"], METADATA_BYTE_CAP)
-    vectors.append({
-        "id": str(uuid.uuid4()),
-        "values": e.tolist(),
-        "metadata": {
-            "text": capped_text,
-            "title": c.get("title", "") or ""
-        }
-    })
-
-if not vectors:
-    raise RuntimeError("No valid vectors to upsert after chunking and embedding.")
-
-BATCH_SIZE = 200
-for i in range(0, len(vectors), BATCH_SIZE):
-    index.upsert(vectors=vectors[i:i+BATCH_SIZE])
-print(f"Upserted {len(vectors)} vectors to Pinecone.")
-
-# --------- QUERY LOOP ----------
-while True:
-    query = input("\n🔍 Ask a question (or type 'exit'): ").strip()
-    if query.lower() == "exit":
-        break
-    query_vec = model.encode(query).tolist()
-    result = index.query(vector=query_vec, top_k=3, include_metadata=True)
-
-    print("\n📌 Top Matching Clauses:")
-    for match in result["matches"]:
-        print(f" - {match['metadata']['text']} (score: {match['score']:.4f})")
-
-    answer = generate_answer_with_gemini(query, result["matches"])
-    print(f"\n🧠 Answer:\n{answer}")
+    METADATA_BYTE_CAP = 20000
+    texts = [(c["text"] or "").strip() for c in chunks if (c["text"] or "").strip()]
+    embs = model.encode(texts, batch_size=64, show_progress_bar=False)
+    vectors = []
+    for e, c in zip(embs, chunks[:len(embs)]):
+        if len(e) != dim:
+            continue
+        capped_text = _cap_bytes(c["text"], METADATA_BYTE_CAP)
+        vectors.append({
+            "id": str(uuid.uuid4()),
+            "values": e.tolist(),
+            "metadata": {
+                "text": capped_text,
+                "title": c.get("title", "") or ""
+            }
+        })
+    if not vectors:
+        raise RuntimeError("No valid vectors to upsert after chunking and embedding.")
+    BATCH_SIZE = 200
+    for i in range(0, len(vectors), BATCH_SIZE):
+        index.upsert(vectors=vectors[i:i+BATCH_SIZE])
+    print(f"Upserted {len(vectors)} vectors to Pinecone.")
+    return len(vectors)

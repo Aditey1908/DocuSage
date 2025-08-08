@@ -1,5 +1,11 @@
-import logging
 import os
+import logging
+import importlib.util
+import sys
+semantic_chunker_spec = importlib.util.spec_from_file_location("semantic_chunker", os.path.join(os.path.dirname(__file__), "semantic_chunker.py"))
+semantic_chunker = importlib.util.module_from_spec(semantic_chunker_spec)
+sys.modules["semantic_chunker"] = semantic_chunker
+semantic_chunker_spec.loader.exec_module(semantic_chunker)
 import platform
 import subprocess
 import tempfile
@@ -392,6 +398,36 @@ def hackrx_run():
                 parsing_success = True
                 parsing_error = None
                 logger.info(f"PDF successfully parsed to text file: {txt_filepath}")
+                # Semantic chunking and Pinecone upsert
+                try:
+                    vectors_upserted = semantic_chunker.process_text_for_semantic_search(extracted_text)
+                    logger.info(f"Semantic chunking and upserted {vectors_upserted} vectors to Pinecone.")
+                    chunking_success = True
+                    chunking_error = None
+                    # --- Answer questions using Pinecone and Gemini ---
+                    answers = []
+                    if questions:
+                        # Use the same model and index as in semantic_chunker
+                        model = semantic_chunker.model
+                        index = semantic_chunker.index
+                        generate_answer_with_gemini = semantic_chunker.generate_answer_with_gemini
+                        for q in questions:
+                            q_vec = model.encode(q).tolist()
+                            result = index.query(vector=q_vec, top_k=3, include_metadata=True)
+                            answer = generate_answer_with_gemini(q, result["matches"])
+                            answers.append({
+                                "question": q,
+                                "answer": answer,
+                                "top_chunks": [m["metadata"]["text"] for m in result["matches"]]
+                            })
+                    else:
+                        answers = []
+                except Exception as chunking_error_exc:
+                    logger.error(f"Semantic chunking failed: {chunking_error_exc}")
+                    vectors_upserted = 0
+                    chunking_success = False
+                    chunking_error = str(chunking_error_exc)
+                    answers = []
             except Exception as parse_error:
                 logger.warning(f"PDF parsing failed, but PDF conversion was successful: {parse_error}")
                 txt_filepath = None
@@ -399,7 +435,9 @@ def hackrx_run():
                 extracted_text = None
                 parsing_success = False
                 parsing_error = str(parse_error)
-            
+                vectors_upserted = 0
+                chunking_success = False
+                chunking_error = "No text to chunk."
             # All documents are now converted to PDF
             response_data = {
                 'status': 'success',
@@ -416,13 +454,17 @@ def hackrx_run():
                     'text_file_size_bytes': txt_file_size,
                     'extracted_text_preview': extracted_text[:500] + '...' if extracted_text and len(extracted_text) > 500 else extracted_text,
                     'error': parsing_error
-                }
+                },
+                'semantic_chunking': {
+                    'success': chunking_success,
+                    'vectors_upserted': vectors_upserted,
+                    'error': chunking_error
+                },
+                'answers': answers
             }
-            
             # Include questions in response for reference
             if questions:
                 response_data['questions'] = questions
-            
             return jsonify(response_data), 200
             
         except Exception as e:
