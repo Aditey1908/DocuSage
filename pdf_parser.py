@@ -5,10 +5,12 @@ import re
 import shutil
 import subprocess
 import sys
-from collections import Counter
-from typing import List, Tuple
+from collections import Counter, defaultdict
+from typing import List, Tuple, Optional, Dict, Set
+
 
 import fitz  # PyMuPDF
+
 
 
 LIG_MAP = {
@@ -18,11 +20,13 @@ LIG_MAP = {
 }
 _LIG_RE = re.compile("|".join(map(re.escape, LIG_MAP.keys())))
 
+
 def normalize(s: str) -> str:
     if not s:
         return ""
     s = _LIG_RE.sub(lambda m: LIG_MAP[m.group(0)], s)
     return s.replace("\t", " ").strip()
+
 
 def dehyphenate(text: str) -> str:
     # join hyphenated line-breaks like "bene-\nfit" -> "benefit"
@@ -31,9 +35,145 @@ def dehyphenate(text: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text
 
+
 # ---------- types ----------
 
+
 Line = Tuple[float, float, float, str, float]  # (x0, y_mid, x1, text, avg_font_size)
+
+
+# ---------- table detection and extraction ----------
+
+
+def detect_and_convert_tables(lines: List[Line], y_tolerance: float = 8.0) -> Tuple[List[str], List[Line]]:
+    """
+    Detect tables and convert them to pipe format, return both tables and remaining lines.
+    """
+    if len(lines) < 6:  # Need reasonable minimum for a table
+        return [], lines
+    
+    # Group lines by similar y-coordinates (potential rows)
+    y_groups = defaultdict(list)
+    for i, line in enumerate(lines):
+        y_key = round(line[1] / y_tolerance) * y_tolerance
+        y_groups[y_key].append((i, line))
+    
+    # Find groups that could be table rows (multiple items with spread-out x positions)
+    table_rows = []
+    used_indices = set()
+    
+    for y_key in sorted(y_groups.keys()):
+        group = y_groups[y_key]
+        if len(group) >= 2:  # At least 2 items per row
+            # Check x-coordinate spread
+            x_positions = [line[1][0] for line in group]  # line[1] is the actual Line tuple
+            x_span = max(x_positions) - min(x_positions)
+            
+            # If items are spread across a reasonable width, it's likely a table row
+            if x_span > 70:  # Adjustable threshold
+                row_data = sorted(group, key=lambda x: x[1][0])  # Sort by x-coordinate
+                table_rows.append((y_key, row_data))
+                used_indices.update(idx for idx, _ in row_data)
+    
+    tables = []
+    remaining_lines = []
+    
+    # Separate used (table) and unused (regular text) lines
+    for i, line in enumerate(lines):
+        if i not in used_indices:
+            remaining_lines.append(line)
+    
+    # Process consecutive table rows into tables
+    if len(table_rows) >= 2:  # Need at least 2 rows for a table
+        current_table_rows = []
+        
+        # Group consecutive rows
+        for i, (y_key, row_data) in enumerate(table_rows):
+            if not current_table_rows:
+                current_table_rows.append((y_key, row_data))
+            else:
+                prev_y = current_table_rows[-1][0]
+                if abs(y_key - prev_y) <= y_tolerance * 4:  # Close enough to be same table
+                    current_table_rows.append((y_key, row_data))
+                else:
+                    # Process current table and start new one
+                    if len(current_table_rows) >= 2:
+                        table_text = format_table_rows(current_table_rows)
+                        if table_text:
+                            tables.append(table_text)
+                    current_table_rows = [(y_key, row_data)]
+        
+        # Don't forget the last table
+        if len(current_table_rows) >= 2:
+            table_text = format_table_rows(current_table_rows)
+            if table_text:
+                tables.append(table_text)
+    
+    return tables, remaining_lines
+
+
+def format_table_rows(table_rows: List[Tuple[float, List[Tuple[int, Line]]]]) -> Optional[str]:
+    """
+    Convert grouped table rows into pipe-delimited format.
+    """
+    if not table_rows:
+        return None
+    
+    # Extract all x-positions to determine column boundaries
+    all_x_positions = set()
+    for _, row_data in table_rows:
+        for _, line in row_data:
+            all_x_positions.add(line[0])  # x0
+            all_x_positions.add(line[2])  # x1
+    
+    if len(all_x_positions) < 4:  # Need reasonable number of positions for columns
+        return None
+    
+    # Sort positions to create column boundaries
+    sorted_positions = sorted(all_x_positions)
+    
+    # Create column ranges
+    col_boundaries = []
+    for i in range(len(sorted_positions) - 1):
+        col_boundaries.append((sorted_positions[i], sorted_positions[i + 1]))
+    
+    # Build table
+    formatted_rows = []
+    
+    for _, row_data in table_rows:
+        # Determine number of columns based on data
+        max_cols = max(3, len(row_data))  # At least 3 columns minimum
+        cells = [""] * max_cols
+        
+        # Sort row items by x-position
+        sorted_row = sorted(row_data, key=lambda x: x[1][0])
+        
+        # Assign each text to a column
+        for col_idx, (_, line) in enumerate(sorted_row[:max_cols]):
+            cells[col_idx] = normalize(line[3])
+        
+        # Only add rows that have content
+        if any(cell.strip() for cell in cells):
+            formatted_rows.append(cells)
+    
+    if len(formatted_rows) < 2:
+        return None
+    
+    # Ensure all rows have same number of columns
+    if formatted_rows:
+        max_cols = max(len(row) for row in formatted_rows)
+        for row in formatted_rows:
+            while len(row) < max_cols:
+                row.append("")
+    
+    # Format as pipe-delimited
+    table_lines = []
+    for row in formatted_rows:
+        cleaned_row = [cell.strip() for cell in row]
+        table_line = "| " + " | ".join(cleaned_row) + " |"
+        table_lines.append(table_line)
+    
+    return "\n".join(table_lines)
 
 # ---------- core extraction ----------
 
@@ -96,7 +236,7 @@ def build_boilerplate_mask(
 
 def order_by_columns(lines: List[Line]) -> List[Line]:
     """
-    Robust 1–3 column ordering via simple x-histogram peak picking.
+    Robust 1â€“3 column ordering via simple x-histogram peak picking.
     """
     if len(lines) < 10:
         return sorted(lines, key=lambda t: (t[1], t[0]))
@@ -208,27 +348,47 @@ def extract_document(
         keep = []
         for (x0, y, x1, txt, fs) in pages_lines[i]:
             yb = int(round(y / band_px))
-            if (yb, txt) in boiler:
+            norm_txt = normalize_for_boiler(txt)
+            if (yb, norm_txt) in boiler:
                 continue
             keep.append((x0, y, x1, txt, fs))
         if not keep:
             continue
 
-        # column-aware ordering
-        ordered = order_by_columns(keep)
-        paras = lines_to_paragraphs(ordered)
-        paras = [normalize(p) for p in paras if p]
 
-        # targeted layout assist for messy pages
-        use_layout = layout_available and (looks_tabular_or_dense(keep) or contains_tableish_keywords(paras))
-        if use_layout:
+        # Try table detection first
+        tables, remaining_lines = detect_and_convert_tables(keep)
+        
+        # Check if we should use layout assist for remaining content
+        use_layout = layout_available and (looks_tabular_or_dense(remaining_lines) or contains_tableish_keywords([]))
+        
+        page_content = []
+        
+        # Add detected tables
+        for table in tables:
+            page_content.append(table)
+        
+        if use_layout and remaining_lines:
+            # Use pdftotext for complex remaining content
             laid = pdftotext_layout_page(pdf_path, i)
             if laid:
-                parts.append(laid)
-                continue  # done with this page
-
-        # normal path
-        page_text = "\n\n".join(paras).strip()
+                page_content.append(laid)
+            else:
+                # Fallback to normal processing
+                ordered = order_by_columns(remaining_lines)
+                paras = lines_to_paragraphs(ordered)
+                paras = [normalize(p) for p in paras if p.strip()]
+                page_content.extend(paras)
+        else:
+            # Normal paragraph processing for remaining content
+            if remaining_lines:
+                ordered = order_by_columns(remaining_lines)
+                paras = lines_to_paragraphs(ordered)
+                paras = [normalize(p) for p in paras if p.strip()]
+                page_content.extend(paras)
+        
+        # Join all content for this page
+        page_text = "\n\n".join(page_content).strip()
         if page_text:
             parts.append(page_text)
 
@@ -242,7 +402,7 @@ def extract_document(
 # ---------- CLI ----------
 
 def main():
-    ap = argparse.ArgumentParser(description="Fast PDF extractor for born-digital PDFs (no OCR).")
+    ap = argparse.ArgumentParser(description="Fast PDF extractor for born-digital PDFs with table detection (no OCR).")
     ap.add_argument("pdf", help="Input PDF path")
     ap.add_argument("-o", "--out", help="Output .txt path (default: stdout)")
     ap.add_argument("--header-threshold", type=float, default=0.85,

@@ -7,3 +7,14 @@ google-generativeai
 pinecone
 sentence-transformers
 faiss-cpu
+# RAG runner dependencies
+astrapy-2.0.1 
+deprecation-2.1.0 
+dnspython-2.7.0 
+h2-4.2.0 
+hpack-4.1.0 
+hyperframe-6.1.0 
+pymongo-4.14.0 
+toml-0.10.2 
+uuid6-2025.0.1
+
