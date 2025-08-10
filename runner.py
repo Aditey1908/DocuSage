@@ -8,6 +8,7 @@ import json
 import uuid
 import time
 from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from openai import OpenAI
 import voyageai
@@ -19,8 +20,8 @@ load_dotenv()
 # Constants
 BATCH_SIZE_EMBEDDINGS = 128
 BATCH_SIZE_INSERTS = 1000
-ANN_K = 20  # Top K from vector search
-TOP_M_FOR_LLM = 5  # Top M after reranking (before adding neighbors)
+ANN_K = 12  # Reduced from 20 for faster search
+TOP_M_FOR_LLM = 3  # Reduced from 5 for fewer API calls
 DIM = 1536
 
 # Configuration from environment
@@ -39,8 +40,8 @@ voyage_client = voyageai.Client(api_key=VOYAGE_API_KEY)
 
 # Sample questions (hardcoded for now)
 QUESTIONS = [
-    "What is the grace period for premium payment under the National Parivar Mediclaim Plus Policy?",
-    "What is the waiting period for pre-existing diseases (PED) to be covered?",
+    "How is an accident defined in this policy?",
+    "What is the document about?",
     "Does this policy cover maternity expenses, and what are the conditions?",
     "What is the waiting period for cataract surgery?",
     "Are the medical expenses for an organ donor covered under this policy?",
@@ -138,6 +139,18 @@ def embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     
     return chunks
 
+def batch_embed_questions(questions: List[str]) -> List[List[float]]:
+    """Embed all questions at once for efficiency."""
+    print(f"🔍 Batch embedding {len(questions)} questions...")
+    start_time = time.time()
+    
+    embeddings = get_embeddings_batch(questions)
+    
+    embedding_time = time.time() - start_time
+    print(f"✅ Question embeddings completed in {embedding_time:.2f} seconds")
+    
+    return embeddings
+
 def store_chunks_in_astra(chunks: List[Dict[str, Any]], request_id: str):
     """Store chunks in Astra DB with batched inserts."""
     print(f"💾 Storing {len(chunks)} chunks in Astra DB...")
@@ -170,13 +183,12 @@ def store_chunks_in_astra(chunks: List[Dict[str, Any]], request_id: str):
     
     return collection
 
-def search_and_rerank(question: str, collection, request_id: str, total_chunks: int) -> List[Dict[str, Any]]:
+def search_and_rerank(question: str, question_embedding: List[float], collection, request_id: str, total_chunks: int) -> List[Dict[str, Any]]:
     """Search for relevant chunks and rerank them."""
     print(f"🔍 Processing question: {question[:100]}...")
     
-    # Embed the question
-    print("   📝 Embedding question...")
-    question_embedding = get_embeddings_batch([question])[0]
+    # Use pre-computed question embedding
+    print("   📝 Using pre-computed question embedding...")
     
     # Vector search in Astra
     print(f"   🎯 Vector search (top {ANN_K})...")
@@ -190,7 +202,7 @@ def search_and_rerank(question: str, collection, request_id: str, total_chunks: 
     print(f"   📊 Found {len(search_results_list)} results from vector search")
     
     if not search_results_list:
-        print("   ⚠  No results found in vector search")
+        print("   ⚠️  No results found in vector search")
         return []
     
     ann_ids = [doc["id"] for doc in search_results_list]
@@ -305,7 +317,7 @@ Answer format: Be direct and fact-focused, similar to policy summaries."""
     # Check context size and truncate if too large (GPT-4o-mini has ~128K token limit)
     max_context_chars = 1000000  # ~12K tokens, leaving room for system prompt and response
     if len(context) > max_context_chars:
-        print(f"   ⚠  Context too large ({len(context):,} chars), truncating to {max_context_chars:,}")
+        print(f"   ⚠️  Context too large ({len(context):,} chars), truncating to {max_context_chars:,}")
         context = context[:max_context_chars] + "\n\n[Context truncated due to size limits]"
     
     try:
@@ -349,7 +361,7 @@ def cleanup_request_data(collection, request_id: str):
             # Handle API signature differences
             count_before = collection.count_documents(filter={"request_id": request_id})
         
-        print(f"   🗑  Deleting {count_before} documents...")
+        print(f"   🗑️  Deleting {count_before} documents...")
         
         # Delete all documents with this request_id
         delete_result = collection.delete_many(filter={"request_id": request_id})
@@ -357,6 +369,36 @@ def cleanup_request_data(collection, request_id: str):
         
     except Exception as e:
         print(f"❌ Error during cleanup: {e}")
+
+def process_single_question(question_idx: int, question: str, question_embedding: List[float], 
+                          collection, request_id: str, total_chunks: int) -> str:
+    """Process a single question and return its answer."""
+    try:
+        print(f"\n❓ Question {question_idx + 1}/{len(QUESTIONS)}")
+        
+        # Search and rerank
+        relevant_chunks = search_and_rerank(question, question_embedding, collection, request_id, total_chunks)
+        
+        if not relevant_chunks:
+            answer = "Not found in the provided document."
+            print(f"   💬 Answer: {answer}")
+        else:
+            # Create context
+            context = create_llm_context(relevant_chunks)
+            context_size = len(context.encode('utf-8'))
+            print(f"   📏 Context size: {context_size:,} bytes ({len(relevant_chunks)} chunks)")
+            
+            # Get answer
+            print("   🤖 Generating answer...")
+            answer = answer_question(question, context)
+            print(f"   💬 Answer: {answer}")
+        
+        return answer
+        
+    except Exception as e:
+        error_msg = f"Error processing question: {str(e)}"
+        print(f"   ❌ {error_msg}")
+        return error_msg
 
 def main():
     if len(sys.argv) != 2:
@@ -391,32 +433,32 @@ def main():
         
         print("-" * 80)
         
-        # Step 4: Process questions
+        # Step 4: Batch embed all questions
+        question_embeddings = batch_embed_questions(QUESTIONS)
+        
+        # Step 5: Process questions in parallel
+        print(f"\n🚀 Processing {len(QUESTIONS)} questions in parallel...")
+        parallel_start = time.time()
+        
         answers = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Submit all questions for parallel processing
+            futures = [
+                executor.submit(
+                    process_single_question, 
+                    i, question, question_embeddings[i], 
+                    collection, request_id, total_chunks
+                )
+                for i, question in enumerate(QUESTIONS)
+            ]
+            
+            # Collect results in order
+            answers = [future.result() for future in futures]
         
-        for i, question in enumerate(QUESTIONS, 1):
-            print(f"\n❓ Question {i}/{len(QUESTIONS)}")
-            
-            # Search and rerank
-            relevant_chunks = search_and_rerank(question, collection, request_id, total_chunks)
-            
-            if not relevant_chunks:
-                answer = "Not found in the provided document."
-                print(f"   💬 Answer: {answer}")
-            else:
-                # Create context
-                context = create_llm_context(relevant_chunks)
-                context_size = len(context.encode('utf-8'))
-                print(f"   📏 Context size: {context_size:,} bytes ({len(relevant_chunks)} chunks)")
-                
-                # Get answer
-                print("   🤖 Generating answer...")
-                answer = answer_question(question, context)
-                print(f"   💬 Answer: {answer}")
-            
-            answers.append(answer)
+        parallel_time = time.time() - parallel_start
+        print(f"\n✅ Parallel processing completed in {parallel_time:.2f} seconds")
         
-        # Step 5: Output results
+        # Step 6: Output results
         print("\n" + "=" * 80)
         print("📋 FINAL RESULTS")
         print("=" * 80)
@@ -428,7 +470,7 @@ def main():
         
         print(json.dumps(results, indent=2))
         
-        # Step 6: Cleanup
+        # Step 7: Cleanup
         print("\n" + "-" * 80)
         cleanup_request_data(collection, request_id)
         
