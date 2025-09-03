@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Document Icon -->
+  <path d="M24 9V27C24 27.55 23.55 28 23 28H9C8.45 28 8 27.55 8 27V5C8 4.45 8.45 4 9 4H19L24 9Z"
+    fill="#3A5A40" stroke="#3A5A40" stroke-width="0.5" />
+  <path d="M19 4L19 9H24L19 4Z" fill="#A3B18A" stroke="#A3B18A" stroke-width="0.3" />
+
+  <!-- Leaf -->
+  <path d="M17 14C17 14 15 13 14 15C13 17 14 19 15 20C16 21 18 20 18 18" fill="#3A5A40" />
+  <path d="M15 20C15 20 13 18 14 15" stroke="#A3B18A" stroke-width="0.7" stroke-linecap="round" />
+</svg>
