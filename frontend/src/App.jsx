@@ -57,7 +57,7 @@ function App() {
               onClick={handleProcessDocument}
               disabled={!file || isLoading}
             >
-              {isLoading ? 'Processing...' : file ? 'Start Learning' : 'Upload a document to begin'}
+              {isLoading ? 'Processing...' : file ? 'Start Learning about your doc' : 'Upload a document to begin'}
             </button>
           </section>
         </main>

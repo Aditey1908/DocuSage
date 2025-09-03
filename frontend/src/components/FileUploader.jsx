@@ -63,7 +63,7 @@ function FileUploader({ file, setFile }) {
                 ? 'Drop your document here' 
                 : file 
                   ? file.name 
-                  : 'Start Learning'
+                  : 'Ask your doc'
               }
             </p>
             <p className="text-white/80 text-sm">
