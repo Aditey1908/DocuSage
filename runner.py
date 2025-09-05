@@ -58,16 +58,16 @@ def normalize_text(text: str) -> str:
 
 def parse_chunks(file_path: str) -> List[Dict[str, Any]]:
     """Parse chunks from the input file."""
-    print(f"📖 Reading file: {file_path}")
+    print(f"Reading file: {file_path}")
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
     except FileNotFoundError:
-        print(f"❌ Error: File not found: {file_path}")
+        print(f"Error: File not found: {file_path}")
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Error reading file: {e}")
+        print(f"Error reading file: {e}")
         sys.exit(1)
     
     content = normalize_text(content)
@@ -96,10 +96,10 @@ def parse_chunks(file_path: str) -> List[Dict[str, Any]]:
                 })
                 chunk_index += 1
     
-    print(f"✅ Parsed {len(chunks)} chunks")
+    print(f"Parsed {len(chunks)} chunks")
     
     if chunks:
-        print(f"📋 First chunk sample (ID: {chunks[0]['id']}):")
+        print(f"First chunk sample (ID: {chunks[0]['id']}):")
         sample_text = chunks[0]['text_full'][:200] + "..." if len(chunks[0]['text_full']) > 200 else chunks[0]['text_full']
         print(f"   {sample_text}")
     
@@ -114,12 +114,12 @@ def get_embeddings_batch(texts: List[str]) -> List[List[float]]:
         )
         return [data.embedding for data in response.data]
     except Exception as e:
-        print(f"❌ Error getting embeddings: {e}")
+        print(f"Error getting embeddings: {e}")
         raise
 
 def embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Embed all chunks using batched requests."""
-    print(f"🔍 Embedding {len(chunks)} chunks...")
+    print(f"Embedding {len(chunks)} chunks...")
     
     start_time = time.time()
     
@@ -135,25 +135,25 @@ def embed_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             chunks[i + j]["$vector"] = embedding
     
     embedding_time = time.time() - start_time
-    print(f"✅ Embeddings completed in {embedding_time:.2f} seconds")
+    print(f"Embeddings completed in {embedding_time:.2f} seconds")
     
     return chunks
 
 def batch_embed_questions(questions: List[str]) -> List[List[float]]:
     """Embed all questions at once for efficiency."""
-    print(f"🔍 Batch embedding {len(questions)} questions...")
+    print(f"Batch embedding {len(questions)} questions...")
     start_time = time.time()
     
     embeddings = get_embeddings_batch(questions)
     
     embedding_time = time.time() - start_time
-    print(f"✅ Question embeddings completed in {embedding_time:.2f} seconds")
+    print(f"Question embeddings completed in {embedding_time:.2f} seconds")
     
     return embeddings
 
 def store_chunks_in_astra(chunks: List[Dict[str, Any]], request_id: str):
     """Store chunks in Astra DB with batched inserts."""
-    print(f"💾 Storing {len(chunks)} chunks in Astra DB...")
+    print(f"Storing {len(chunks)} chunks in Astra DB...")
     
     # Setup Astra connection
     endpoint = f"https://{ASTRA_DB_ID}-{ASTRA_DB_REGION}.apps.astra.datastax.com"
@@ -175,23 +175,23 @@ def store_chunks_in_astra(chunks: List[Dict[str, Any]], request_id: str):
         try:
             collection.insert_many(batch)
         except Exception as e:
-            print(f"❌ Error inserting batch: {e}")
+            print(f"Error inserting batch: {e}")
             raise
     
     storage_time = time.time() - start_time
-    print(f"✅ Storage completed in {storage_time:.2f} seconds")
+    print(f"Storage completed in {storage_time:.2f} seconds")
     
     return collection
 
 def search_and_rerank(question: str, question_embedding: List[float], collection, request_id: str, total_chunks: int) -> List[Dict[str, Any]]:
     """Search for relevant chunks and rerank them."""
-    print(f"🔍 Processing question: {question[:100]}...")
+    print(f"Processing question: {question[:100]}...")
     
     # Use pre-computed question embedding
-    print("   📝 Using pre-computed question embedding...")
+    print("   Using pre-computed question embedding...")
     
     # Vector search in Astra
-    print(f"   🎯 Vector search (top {ANN_K})...")
+    print(f"   Vector search (top {ANN_K})...")
     search_results = collection.find(
         filter={"request_id": request_id},
         sort={"$vector": question_embedding},
@@ -199,17 +199,17 @@ def search_and_rerank(question: str, question_embedding: List[float], collection
     )
     
     search_results_list = list(search_results)
-    print(f"   📊 Found {len(search_results_list)} results from vector search")
+    print(f"   Found {len(search_results_list)} results from vector search")
     
     if not search_results_list:
-        print("   ⚠️  No results found in vector search")
+        print("   No results found in vector search")
         return []
     
     ann_ids = [doc["id"] for doc in search_results_list]
-    print(f"   🔢 ANN hit IDs: {ann_ids}")
+    print(f"   ANN hit IDs: {ann_ids}")
     
     # Rerank using VoyageAI
-    print(f"   🎯 Reranking with VoyageAI...")
+    print(f"   Reranking with VoyageAI...")
     documents_for_rerank = [doc["text_full"] for doc in search_results_list]
     
     try:
@@ -231,21 +231,21 @@ def search_and_rerank(question: str, question_embedding: List[float], collection
         
         reranked_ids = [doc["id"] for doc in reranked_results]
         rerank_scores = [f"{doc['rerank_score']:.3f}" for doc in reranked_results]
-        print(f"   🎯 Reranked IDs: {reranked_ids}")
-        print(f"   📈 Rerank scores: {rerank_scores}")
+        print(f"   Reranked IDs: {reranked_ids}")
+        print(f"   Rerank scores: {rerank_scores}")
         
         # Take top M results
         top_results = reranked_results[:TOP_M_FOR_LLM]
-        print(f"   🏆 Selected top {len(top_results)} results for LLM")
+        print(f"   Selected top {len(top_results)} results for LLM")
         
     except Exception as e:
-        print(f"❌ Error during reranking: {e}")
+        print(f"Error during reranking: {e}")
         # Fallback to original search results
         top_results = search_results_list[:TOP_M_FOR_LLM]
-        print(f"   🔄 Fallback: using top {len(top_results)} from vector search")
+        print(f"   Fallback: using top {len(top_results)} from vector search")
     
     # Add immediate neighbors
-    print("   👥 Adding immediate neighbors...")
+    print("   Adding immediate neighbors...")
     neighbor_chunks = set()
     
     for doc in top_results:
@@ -263,7 +263,7 @@ def search_and_rerank(question: str, question_embedding: List[float], collection
     final_chunks = list(top_results)  # Start with reranked results
     
     if neighbor_chunks:
-        print(f"   🔍 Fetching {len(neighbor_chunks)} neighbor chunks: {sorted(neighbor_chunks)}")
+        print(f"   Fetching {len(neighbor_chunks)} neighbor chunks: {sorted(neighbor_chunks)}")
         
         for neighbor_index in neighbor_chunks:
             # Check if we already have this chunk
@@ -284,7 +284,7 @@ def search_and_rerank(question: str, question_embedding: List[float], collection
     
     final_ids = [doc["id"] for doc in final_chunks]
     final_indices = [doc["meta"]["chunk_index"] for doc in final_chunks]
-    print(f"   📚 Final context chunks: {final_ids} (indices: {final_indices})")
+    print(f"   Final context chunks: {final_ids} (indices: {final_indices})")
     
     return final_chunks
 
@@ -304,20 +304,22 @@ def answer_question(question: str, context: str) -> str:
     system_prompt = """You are a precise insurance policy assistant. Answer questions based solely on the provided document context.
 
 Guidelines:
-- Provide direct, factual answers focusing on the core question
-- Start with "Yes" or "No" for yes/no questions, then explain briefly
-- Include specific numbers, time periods, and key conditions
-- Keep answers concise (1-3 sentences) while being complete
-- Avoid long lists unless specifically asked for comprehensive details
-- State exact waiting periods, percentages, and limits when mentioned
-- Only say "Not found in the provided document." if the information is truly absent after thorough search
+- If the question is a clear yes/no question, start your answer with "Yes." or "No." as appropriate, then add a brief, factual explanation.
+- If the question is not a yes/no question, do not begin your answer with "Yes" or "No"; answer directly and factually.
+- Include specific numbers, time periods, and key conditions.
+- Keep answers concise (1-3 sentences) while being complete.
+- Avoid long lists unless specifically asked for comprehensive details.
+- State exact waiting periods, percentages, and limits when mentioned.
+- Only say "Not found in the provided document." if the information is truly absent after thorough search.
 
-Answer format: Be direct and fact-focused, similar to policy summaries."""
+Answer format: Be direct, fact-focused, and context-aware in your tone."""
+
+
     
     # Check context size and truncate if too large (GPT-4o-mini has ~128K token limit)
     max_context_chars = 1000000  # ~12K tokens, leaving room for system prompt and response
     if len(context) > max_context_chars:
-        print(f"   ⚠️  Context too large ({len(context):,} chars), truncating to {max_context_chars:,}")
+        print(f"   Context too large ({len(context):,} chars), truncating to {max_context_chars:,}")
         context = context[:max_context_chars] + "\n\n[Context truncated due to size limits]"
     
     try:
@@ -336,7 +338,7 @@ Answer format: Be direct and fact-focused, similar to policy summaries."""
         # Debug info
         finish_reason = response.choices[0].finish_reason
         tokens_used = response.usage.completion_tokens if response.usage else "unknown"
-        print(f"   🔧 Debug: finish_reason={finish_reason}, tokens_used={tokens_used}")
+        print(f"   Debug: finish_reason={finish_reason}, tokens_used={tokens_used}")
         
         if not answer:
             return "Error: Empty response from LLM."
@@ -344,14 +346,14 @@ Answer format: Be direct and fact-focused, similar to policy summaries."""
         return answer
         
     except Exception as e:
-        print(f"❌ Error getting LLM response: {e}")
-        print(f"   📏 Context size was: {len(context):,} chars / {len(context.encode('utf-8')):,} bytes")
-        print(f"   📝 Question was: {question[:100]}...")
+        print(f"Error getting LLM response: {e}")
+        print(f"   Context size was: {len(context):,} chars / {len(context.encode('utf-8')):,} bytes")
+        print(f"   Question was: {question[:100]}...")
         return f"Error: {str(e)}"
 
 def cleanup_request_data(collection, request_id: str):
     """Clean up all documents with the current request_id."""
-    print(f"🧹 Cleaning up request data (request_id: {request_id})...")
+    print(f"Cleaning up request data (request_id: {request_id})...")
     
     try:
         # Count documents before deletion
@@ -361,57 +363,68 @@ def cleanup_request_data(collection, request_id: str):
             # Handle API signature differences
             count_before = collection.count_documents(filter={"request_id": request_id})
         
-        print(f"   🗑️  Deleting {count_before} documents...")
+        print(f"   Deleting {count_before} documents...")
         
         # Delete all documents with this request_id
         delete_result = collection.delete_many(filter={"request_id": request_id})
-        print(f"   ✅ Deleted {delete_result.deleted_count} documents")
+        print(f"   Deleted {delete_result.deleted_count} documents")
         
     except Exception as e:
-        print(f"❌ Error during cleanup: {e}")
+        print(f"Error during cleanup: {e}")
 
 def process_single_question(question_idx: int, question: str, question_embedding: List[float], 
                           collection, request_id: str, total_chunks: int) -> str:
     """Process a single question and return its answer."""
     try:
-        print(f"\n❓ Question {question_idx + 1}/{len(QUESTIONS)}")
+        print(f"\nQuestion {question_idx + 1}/{len(QUESTIONS)}")
         
         # Search and rerank
         relevant_chunks = search_and_rerank(question, question_embedding, collection, request_id, total_chunks)
         
         if not relevant_chunks:
             answer = "Not found in the provided document."
-            print(f"   💬 Answer: {answer}")
+            print(f"   Answer: {answer}")
         else:
             # Create context
             context = create_llm_context(relevant_chunks)
             context_size = len(context.encode('utf-8'))
-            print(f"   📏 Context size: {context_size:,} bytes ({len(relevant_chunks)} chunks)")
+            print(f"   Context size: {context_size:,} bytes ({len(relevant_chunks)} chunks)")
             
             # Get answer
-            print("   🤖 Generating answer...")
+            print("   Generating answer...")
             answer = answer_question(question, context)
-            print(f"   💬 Answer: {answer}")
+            print(f"   Answer: {answer}")
         
         return answer
         
     except Exception as e:
         error_msg = f"Error processing question: {str(e)}"
-        print(f"   ❌ {error_msg}")
+        print(f"   {error_msg}")
         return error_msg
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python runner.py /path/to/chunked.txt")
+    import sys
+    import json
+
+    # CLI usage: python runner.py chunked.txt [questions.json]
+    if len(sys.argv) < 2:
+        print("Usage: python runner.py /path/to/chunked.txt [optional: questions.json]")
         sys.exit(1)
-    
     file_path = sys.argv[1]
+
+    # If a questions.json file is provided, use it
+    if len(sys.argv) >= 3:
+        with open(sys.argv[2], 'r', encoding='utf-8') as f:
+            user_questions = json.load(f)
+    else:
+        user_questions = QUESTIONS
+
     request_id = str(uuid.uuid4())
     
-    print(f"🚀 Starting RAG pipeline (request_id: {request_id})")
-    print(f"📄 Input file: {file_path}")
-    print(f"🤖 LLM Model: {OPENAI_LLM_MODEL}")
-    print(f"🎯 ANN_K: {ANN_K}, TOP_M_FOR_LLM: {TOP_M_FOR_LLM}")
+    print(f"tarting RAG pipeline (request_id: {request_id})")
+    print(f"Input file: {file_path}")
+    print(f"LLM Model: {OPENAI_LLM_MODEL}")
+    print(f"ANN_K: {ANN_K}, TOP_M_FOR_LLM: {TOP_M_FOR_LLM}")
     print("-" * 80)
     
     start_total = time.time()
@@ -420,7 +433,7 @@ def main():
         # Step 1: Parse chunks
         chunks = parse_chunks(file_path)
         if not chunks:
-            print("❌ No chunks found in file")
+            print("No chunks found in file")
             sys.exit(1)
         
         total_chunks = len(chunks)
@@ -434,10 +447,10 @@ def main():
         print("-" * 80)
         
         # Step 4: Batch embed all questions
-        question_embeddings = batch_embed_questions(QUESTIONS)
+        question_embeddings = batch_embed_questions(user_questions)
         
         # Step 5: Process questions in parallel
-        print(f"\n🚀 Processing {len(QUESTIONS)} questions in parallel...")
+        print(f"\nProcessing {len(user_questions)} questions in parallel...")
         parallel_start = time.time()
         
         answers = []
@@ -449,22 +462,22 @@ def main():
                     i, question, question_embeddings[i], 
                     collection, request_id, total_chunks
                 )
-                for i, question in enumerate(QUESTIONS)
+                for i, question in enumerate(user_questions)
             ]
             
             # Collect results in order
             answers = [future.result() for future in futures]
         
         parallel_time = time.time() - parallel_start
-        print(f"\n✅ Parallel processing completed in {parallel_time:.2f} seconds")
+        print(f"\nParallel processing completed in {parallel_time:.2f} seconds")
         
         # Step 6: Output results
         print("\n" + "=" * 80)
-        print("📋 FINAL RESULTS")
+        print("FINAL RESULTS")
         print("=" * 80)
         
         results = {
-            "questions": QUESTIONS,
+            "questions": user_questions,
             "answers": answers
         }
         
@@ -475,10 +488,10 @@ def main():
         cleanup_request_data(collection, request_id)
         
         total_time = time.time() - start_total
-        print(f"✅ Pipeline completed in {total_time:.2f} seconds")
+        print(f"Pipeline completed in {total_time:.2f} seconds")
         
     except Exception as e:
-        print(f"❌ Pipeline failed: {e}")
+        print(f"Pipeline failed: {e}")
         # Still attempt cleanup
         try:
             endpoint = f"https://{ASTRA_DB_ID}-{ASTRA_DB_REGION}.apps.astra.datastax.com"
