@@ -1,5 +1,7 @@
+
 import { useState } from 'react'
 import docusageLogo from './assets/docusage-logo.png'
+import DocQAForm from './components/DocQAForm'
 import DomainSelector from './components/DomainSelector'
 import FileUploader from './components/FileUploader'
 import { BackgroundGradientAnimation } from './components/ui/background-gradient-animation'
@@ -61,6 +63,7 @@ function App() {
             </button>
           </section>
         </main>
+    <DocQAForm />
       </div>
     </BackgroundGradientAnimation>
   )
