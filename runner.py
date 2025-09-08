@@ -421,7 +421,7 @@ def main():
 
     request_id = str(uuid.uuid4())
     
-    print(f"tarting RAG pipeline (request_id: {request_id})")
+    print(f"Starting RAG pipeline (request_id: {request_id})")
     print(f"Input file: {file_path}")
     print(f"LLM Model: {OPENAI_LLM_MODEL}")
     print(f"ANN_K: {ANN_K}, TOP_M_FOR_LLM: {TOP_M_FOR_LLM}")

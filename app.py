@@ -59,9 +59,18 @@ def process_document():
 
         # Run runner.py with chunked file and questions
         print("[INFO] Launching runner.py subprocess...")
+        
+        # Load environment variables from .env file
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Pass environment variables to the subprocess
+        env = os.environ.copy()
+        
         result = subprocess.run(
             ['python', 'runner.py', chunked_path, questions_path],
-            capture_output=True, text=True
+            capture_output=True, text=True, 
+            env=env  # Pass the environment variables
         )
         print("[INFO] runner.py finished.")
 
