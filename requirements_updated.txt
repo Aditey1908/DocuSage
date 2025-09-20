@@ -1,0 +1,28 @@
+# Core web dependencies
+Flask==2.3.3
+flask-cors==4.0.0
+requests==2.31.0
+
+# Document processing
+pymupdf4llm
+python-docx==0.8.11
+reportlab==4.0.4
+
+# LLM & Embeddings
+openai==1.16.0
+voyageai==0.1.12
+tiktoken==0.5.2
+python-dotenv==1.0.1
+
+# Vector database
+astrapy==2.0.1
+uuid6==2025.0.1 
+
+# Utility dependencies
+deprecation==2.1.0
+dnspython==2.7.0
+h2==4.2.0
+hpack==4.1.0
+hyperframe==6.1.0
+pymongo==4.14.0
+toml==0.10.2
