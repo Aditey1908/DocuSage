@@ -391,9 +391,44 @@ def hierarchical_chunk_file(input_txt_path: str, output_txt_path: str, max_token
         # Step 3: Create semantic chunks that preserve hierarchy
         chunks = create_semantic_chunks(root_node, max_tokens=max_tokens, overlap_tokens=overlap_tokens)
         
-        # Step 4: Write output
+        # Step 4: Ensure no chunk exceeds 8000 bytes
+        def split_chunk_by_bytes(text, max_bytes=8000):
+            encoded = text.encode('utf-8')
+            if len(encoded) <= max_bytes:
+                return [text]
+            parts = []
+            start = 0
+            while start < len(encoded):
+                end = start + max_bytes
+                part = encoded[start:end]
+                # Try to avoid splitting in the middle of a character
+                try:
+                    part_decoded = part.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Find the last valid byte
+                    for i in range(len(part)-1, 0, -1):
+                        try:
+                            part_decoded = part[:i].decode('utf-8')
+                            end = start + i
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                parts.append(part_decoded)
+                start = end
+            return parts
+
+        final_chunks = []
+        for chunk in chunks:
+            for subchunk in split_chunk_by_bytes(chunk, 8000):
+                # Add chunk header if missing (for split chunks)
+                if not subchunk.strip().startswith('=== CHUNK'):
+                    # Try to infer chunk number from previous chunk or just use len(final_chunks)+1
+                    chunk_num = len(final_chunks) + 1
+                    subchunk = f"=== CHUNK {chunk_num} ===\n" + subchunk
+                final_chunks.append(subchunk)
+
         with open(output_txt_path, 'w', encoding='utf-8') as f:
-            f.write('\n\n'.join(chunks))
+            f.write('\n\n'.join(final_chunks))
         
         print(f"Successfully created {len(chunks)} chunks from {input_txt_path}")
         print(f"Output written to {output_txt_path}")

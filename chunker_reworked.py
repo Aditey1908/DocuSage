@@ -220,7 +220,7 @@ def build_hierarchical_structure(text: str) -> HierarchicalNode:
     
     return root
 
-def create_semantic_chunks(node: HierarchicalNode, max_tokens: int = 1350, overlap_tokens: int = 150) -> List[str]:
+def create_semantic_chunks(node: HierarchicalNode, max_tokens: int = 500, overlap_tokens: int = 75) -> List[str]:
     """Create chunks that preserve hierarchical structure and context."""
     chunks = []
     
@@ -375,7 +375,7 @@ def get_overlap_content(lines: List[str], target_tokens: int) -> str:
     
     return overlap_text
 
-def hierarchical_chunk_file(input_txt_path: str, output_txt_path: str, max_tokens: int = 1350, overlap_tokens: int = 150):
+def hierarchical_chunk_file(input_txt_path: str, output_txt_path: str, max_tokens: int = 500, overlap_tokens: int = 75):
     """Main function to hierarchically chunk a text file."""
     try:
         # Read input file
@@ -415,12 +415,12 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3:
         input_file = sys.argv[1]
         output_file = sys.argv[2]
-        max_tokens = int(sys.argv[3]) if len(sys.argv) > 3 else 1350
-        overlap_tokens = int(sys.argv[4]) if len(sys.argv) > 4 else 150
+        max_tokens = int(sys.argv[3]) if len(sys.argv) > 3 else 500
+        overlap_tokens = int(sys.argv[4]) if len(sys.argv) > 4 else 75
     else:
         input_file = "output4.txt"  # Default input file
         output_file = "chunked_output4.txt"  # Default output file
-        max_tokens = 1350
-        overlap_tokens = 150
+        max_tokens = 500
+        overlap_tokens = 75
     
     hierarchical_chunk_file(input_file, output_file, max_tokens, overlap_tokens)

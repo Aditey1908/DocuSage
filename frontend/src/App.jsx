@@ -4,7 +4,7 @@ import docusageLogo from './assets/docusage-logo.png'
 import DocQAForm from './components/DocQAForm'
 import DomainSelector from './components/DomainSelector'
 import FileUploader from './components/FileUploader'
-import { BackgroundGradientAnimation } from './components/ui/background-gradient-animation'
+import { BackgroundGradientAnimation } from './ui/background-gradient-animation'
 
 function App() {
   const [file, setFile] = useState(null)

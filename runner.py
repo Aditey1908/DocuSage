@@ -22,7 +22,7 @@ BATCH_SIZE_EMBEDDINGS = 128
 BATCH_SIZE_INSERTS = 1000
 ANN_K = 12  # Reduced from 20 for faster search
 TOP_M_FOR_LLM = 3  # Reduced from 5 for fewer API calls
-DIM = 1536
+DIM = 1024
 
 # Configuration from environment
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
@@ -56,8 +56,26 @@ def normalize_text(text: str) -> str:
     """Normalize line endings and clean up text."""
     return text.replace('\r\n', '\n').replace('\r', '\n').strip()
 
+# AstraDB indexes ALL string fields by default and limits each to 8000 bytes.
+# The chunker is configured to produce small enough chunks to stay under this limit.
+# truncate_for_index is kept as a last-resort safety net.
+MAX_INDEXED_BYTES = 7500  # Leave a safety margin under the 8000-byte limit
+
+def truncate_for_index(text: str, max_bytes: int = MAX_INDEXED_BYTES) -> str:
+    """Truncate text to fit within AstraDB's 8000-byte indexed field limit."""
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text
+    # Decode back safely (avoid splitting a multi-byte char)
+    return encoded[:max_bytes].decode('utf-8', errors='ignore')
+
 def parse_chunks(file_path: str) -> List[Dict[str, Any]]:
-    """Parse chunks from the input file."""
+    """Parse chunks from the input file.
+    
+    Stores chunk text in 'text_full'. AstraDB indexes all string fields and
+    limits them to 8000 bytes, so chunks must be kept small by the chunker.
+    truncate_for_index() is applied as a last-resort safety net.
+    """
     print(f"Reading file: {file_path}")
     
     try:
@@ -89,9 +107,13 @@ def parse_chunks(file_path: str) -> List[Dict[str, Any]]:
             
             if chunk_text:  # Only add non-empty chunks
                 chunk_id = f"c{chunk_index}"
+                safe_text = truncate_for_index(chunk_text)  # safety net
+                if len(chunk_text.encode('utf-8')) > MAX_INDEXED_BYTES:
+                    print(f"   [WARN] Chunk {chunk_index} exceeded {MAX_INDEXED_BYTES} bytes "
+                          f"({len(chunk_text.encode('utf-8'))} bytes) — truncated for storage.")
                 chunks.append({
                     "id": chunk_id,
-                    "text_full": chunk_text,
+                    "text_full": safe_text,
                     "meta": {"chunk_index": chunk_index}
                 })
                 chunk_index += 1
@@ -106,11 +128,16 @@ def parse_chunks(file_path: str) -> List[Dict[str, Any]]:
     return chunks
 
 def get_embeddings_batch(texts: List[str]) -> List[List[float]]:
-    """Get embeddings for a batch of texts using OpenAI."""
+    """Get embeddings for a batch of texts using OpenAI.
+    
+    Uses text-embedding-3-small with dimensions=1024 to match the AstraDB
+    collection which is configured for 1024-dimensional vectors.
+    """
     try:
         response = openai_client.embeddings.create(
             model="text-embedding-3-small",
-            input=texts
+            input=texts,
+            dimensions=DIM  # Must match the AstraDB collection dimension (1024)
         )
         return [data.embedding for data in response.data]
     except Exception as e:
@@ -330,7 +357,7 @@ Answer format: Be direct, fact-focused, and context-aware in your tone."""
                 {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
             ],
             temperature=0.1,
-            max_tokens=1500
+            max_completion_tokens=1500
         )
         
         answer = response.choices[0].message.content.strip()

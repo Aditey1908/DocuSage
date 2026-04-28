@@ -28,12 +28,20 @@ def process_document():
         file_ext = file_url.split('?')[0].split('.')[-1]
         pdf_path = os.path.join(tmpdir, f'doc.{file_ext}')
         print(f"[INFO] Downloading file to {pdf_path}")
-        with requests.get(file_url, stream=True) as r:
-            r.raise_for_status()
-            with open(pdf_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-        print("[INFO] File downloaded.")
+        try:
+            with requests.get(file_url, stream=True, timeout=15) as r:
+                r.raise_for_status()
+                content_type = r.headers.get('Content-Type', '')
+                if not content_type.startswith('application/pdf'):
+                    print(f"[ERROR] URL did not return a PDF. Content-Type: {content_type}")
+                    return jsonify({'error': f'URL did not return a PDF. Content-Type: {content_type}'}), 400
+                with open(pdf_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            print("[INFO] File downloaded.")
+        except Exception as e:
+            print(f"[ERROR] Failed to download PDF: {e}")
+            return jsonify({'error': f'Failed to download PDF: {str(e)}'}), 400
 
         # Extract text
         txt_path = os.path.join(tmpdir, 'document.txt')
