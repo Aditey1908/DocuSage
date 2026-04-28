@@ -10,8 +10,7 @@ reportlab==4.0.4
 
 # LLM & Embeddings
 openai==1.16.0
-voyageai==0.1.12
-tiktoken==0.5.2
+voyageai==0.3.7
 python-dotenv==1.0.1
 
 # Vector database

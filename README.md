@@ -33,3 +33,33 @@ It combines robust text extraction, semantic chunking, and vector database integ
 2. **Install dependencies**:  
    ```bash
    pip install -r requirements.txt
+
+   ## Frontend
+
+   This repo contains two frontends: the legacy `frontend` (Vite) and a newer Next.js app at `frontend_new`.
+
+   To run both backend and the new frontend together for development, use the helper script at the repo root:
+
+   PowerShell:
+
+   ```powershell
+   .\start_all.ps1
+   ```
+
+   This launches the Flask backend and the Next.js dev server (`frontend_new`). The backend endpoint is available at `http://localhost:5000` and the frontend dev server defaults to `http://localhost:3000`.
+
+   If you prefer to run manually:
+
+   1. Start the backend:
+
+   ```powershell
+   python DocuSage/app.py
+   ```
+
+   2. Start the frontend:
+
+   ```powershell
+   cd DocuSage/frontend_new
+   npm install
+   npm run dev
+   ```
