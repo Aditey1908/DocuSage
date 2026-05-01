@@ -7,9 +7,7 @@ import { navLinks } from "@/lib/docusage"
 
 function BrandMark() {
   return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-900/10 bg-[#0f172a] text-sm font-semibold text-white shadow-lg shadow-emerald-950/10">
-      D
-    </div>
+    <img src="/docusage-logo.png" alt="DocuSage Logo" className="h-11 w-11 object-contain" />
   )
 }
 
