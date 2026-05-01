@@ -1,5 +1,5 @@
 {
-  "installCommand": "npm install --prefix frontend_new",
+  "installCommand": "npm install --prefix frontend_new --legacy-peer-deps",
   "buildCommand": "npm run build --prefix frontend_new",
   "outputDirectory": "frontend_new/.next",
   "framework": "nextjs",
