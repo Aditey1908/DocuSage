@@ -133,8 +133,11 @@ def process_document():
         print("[INFO] runner.py finished.")
 
         if result.returncode != 0:
-            print("[ERROR] Runner failed:\n", result.stderr)
-            return jsonify({"error": "Runner failed", "details": result.stderr}), 500
+            print("[ERROR] Runner failed (returncode=%d)" % result.returncode)
+            print("[ERROR] STDOUT:", result.stdout)
+            print("[ERROR] STDERR:", result.stderr)
+            details = result.stderr or result.stdout or "no output captured"
+            return jsonify({"error": "Runner failed", "details": details}), 500
 
         try:
             json_text = re.search(r"(\{[\s\S]*\})", result.stdout).group(1)
