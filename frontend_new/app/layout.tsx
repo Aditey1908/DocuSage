@@ -24,6 +24,10 @@ export const metadata: Metadata = {
   title: "DocuSage | RAG for Complex Documents",
   description:
     "DocuSage turns dense PDFs into retrieval-ready answers with parsing, semantic chunking, Astra DB storage, and reranking.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.png",
+  },
 }
 
 export default function RootLayout({
