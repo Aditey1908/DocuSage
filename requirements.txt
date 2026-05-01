@@ -11,7 +11,7 @@ reportlab==4.0.4
 
 # LLM & Embeddings
 openai==1.16.0
-voyageai==0.1.12
+voyageai==0.2.4
 tiktoken==0.5.2
 python-dotenv==1.0.1
 
