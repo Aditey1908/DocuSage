@@ -3,12 +3,14 @@ import tempfile
 import uuid
 import requests
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from pdf_parser import extract_document
 from chunker_reworked import hierarchical_chunk_file
 import subprocess
 import json
 
 app = Flask(__name__)
+CORS(app, origins=os.environ.get("ALLOWED_ORIGINS", "*"))
 
 @app.route('/process', methods=['POST'])
 def process_document():
@@ -91,6 +93,10 @@ def process_document():
         print(f"[INFO] Session complete: {session_id}")
 
         return jsonify({'answer': runner_result, 'session_id': session_id})
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

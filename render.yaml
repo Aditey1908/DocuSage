@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: docusage-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --workers 2
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false
+      - key: ASTRA_DB_ID
+        sync: false
+      - key: ASTRA_DB_REGION
+        sync: false
+      - key: ASTRA_DB_APPLICATION_TOKEN
+        sync: false
+      - key: ASTRA_KEYSPACE
+        value: default_keyspace
+      - key: ASTRA_COLLECTION
+        value: rag_chunks
+      - key: OPENAI_LLM_MODEL
+        value: gpt-4.1-nano-2025-04-14
+      - key: MONGO_URI
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
