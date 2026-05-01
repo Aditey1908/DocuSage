@@ -12,7 +12,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/process': 'http://localhost:5000',
+      '/process': process.env.VITE_API_URL || 'http://localhost:5000',
+      '/threads': process.env.VITE_API_URL || 'http://localhost:5000',
     },
   },
 })

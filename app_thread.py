@@ -3,6 +3,7 @@ import tempfile
 import uuid
 import requests
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import subprocess
 import json
 import time
@@ -20,6 +21,7 @@ from thread_manager import (
 )
 
 app = Flask(__name__)
+CORS(app, origins=os.environ.get("ALLOWED_ORIGINS", "*"))
 
 # Store document paths for reuse
 document_paths = {}
@@ -574,6 +576,10 @@ def signal_handler(sig, frame):
 # Register the signal handler
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
 
 if __name__ == '__main__':
     print("[INFO] Starting server... Press Ctrl+C to shut down")

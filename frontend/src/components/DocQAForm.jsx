@@ -7,13 +7,15 @@ export default function DocQAForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setAnswers([]);
     try {
-      const response = await fetch('/process', {
+      const response = await fetch(`${API_BASE}/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

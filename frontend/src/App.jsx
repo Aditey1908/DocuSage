@@ -4,12 +4,14 @@ import docusageLogo from './assets/docusage-logo.png'
 import DocQAForm from './components/DocQAForm'
 import DomainSelector from './components/DomainSelector'
 import FileUploader from './components/FileUploader'
+import BackendStatus from './components/BackendStatus'
 import { BackgroundGradientAnimation } from './ui/background-gradient-animation'
 
 function App() {
   const [file, setFile] = useState(null)
-  const [selectedDomain, setSelectedDomain] = useState('finance') // Default selected domain
+  const [selectedDomain, setSelectedDomain] = useState('finance')
   const [isLoading, setIsLoading] = useState(false)
+  const [backendReady, setBackendReady] = useState(false)
 
   const handleProcessDocument = () => {
     if (!file) return
@@ -36,6 +38,10 @@ function App() {
             </p>
           </div>
         </header>
+
+        <div className="mb-6">
+          <BackendStatus onReady={() => setBackendReady(true)} />
+        </div>
         
         <main className="w-full">
           <section className="bg-white/10 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl border border-white/20 transition-all duration-500 hover:shadow-purple-500/20 hover:border-white/30">
@@ -54,10 +60,10 @@ function App() {
             <button 
               className={`mt-8 w-full max-w-[300px] mx-auto block py-3.5 px-8 bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 text-white rounded-full font-medium text-base transition-all duration-300 
               shadow-lg hover:shadow-xl hover:shadow-purple-500/30 
-              ${!file && 'opacity-70 cursor-not-allowed filter grayscale'} 
+              ${(!file || !backendReady) && 'opacity-70 cursor-not-allowed filter grayscale'} 
               ${isLoading ? 'animate-pulse' : 'hover:scale-105'}`}
               onClick={handleProcessDocument}
-              disabled={!file || isLoading}
+              disabled={!file || isLoading || !backendReady}
             >
               {isLoading ? 'Processing...' : file ? 'Start Learning about your doc' : 'Upload a document to begin'}
             </button>

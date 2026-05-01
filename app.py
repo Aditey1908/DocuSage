@@ -10,11 +10,11 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-
 from chunker_reworked import hierarchical_chunk_file
 from pdf_parser import extract_document
 
 app = Flask(__name__)
+CORS(app, origins=os.environ.get("ALLOWED_ORIGINS", "*"))
 
 load_dotenv()
 CORS(app, resources={r"/*": {"origins": os.getenv("FRONTEND_URL", "*")}})
@@ -133,8 +133,11 @@ def process_document():
         print("[INFO] runner.py finished.")
 
         if result.returncode != 0:
-            print("[ERROR] Runner failed:\n", result.stderr)
-            return jsonify({"error": "Runner failed", "details": result.stderr}), 500
+            print("[ERROR] Runner failed (returncode=%d)" % result.returncode)
+            print("[ERROR] STDOUT:", result.stdout)
+            print("[ERROR] STDERR:", result.stderr)
+            details = result.stderr or result.stdout or "no output captured"
+            return jsonify({"error": "Runner failed", "details": details}), 500
 
         try:
             json_text = re.search(r"(\{[\s\S]*\})", result.stdout).group(1)
@@ -156,5 +159,9 @@ def process_document():
         )
 
 
-if __name__ == "__main__":
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'}), 200
+
+if __name__ == '__main__':
     app.run(debug=True, port=5000)
