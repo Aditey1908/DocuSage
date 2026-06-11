@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   description:
     "DocuSage turns dense PDFs into retrieval-ready answers with parsing, semantic chunking, Astra DB storage, and reranking.",
   icons: {
-    icon: "/icon.svg",
-    apple: "/apple-icon.png",
+    icon: "/Docusage_Logonew.png",
+    apple: "/Docusage_Logonew.png",
   },
 }
 

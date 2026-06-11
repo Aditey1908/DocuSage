@@ -81,3 +81,4 @@ instance/
 
 # Flask uploads
 uploads/
+TECHNICAL_OVERVIEW.md
